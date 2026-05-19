@@ -1,0 +1,31 @@
+# ─── Virtual Environment ──────────────────────────────────────────────
+venv311/
+venv/
+.venv/
+Env/
+env/
+
+# ─── Machine Learning Model Weights (Over GitHub 100MB limit) ─────────
+backend/dsp_models/*.onnx
+backend/dsp_models/*.dat
+backend/dsp_models/templates/meeting/*.onnx
+backend/dsp_models/templates/meeting/*.dat
+
+# ─── Secrets & API Keys ────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Python Cache & Logs ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+crash.log
+
+# ─── Evaluation Logs & Artifacts ──────────────────────────────────────
+session_metrics.csv
+test_metrics.csv
+test_assets/
+.idea/
+.vscode/

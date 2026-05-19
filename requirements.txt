@@ -1,0 +1,50 @@
+# ─── AI Deepfake Interaction System — Dependencies ───────────────────
+# CENG 384 DSP Project
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9     # required for FastAPI file uploads
+
+# Computer Vision
+opencv-python>=4.9.0.80
+dlib>=19.24.2               # facial landmark detection
+scikit-image>=0.22.0        # SSIM metric
+
+# Audio Processing (DSP Core)
+librosa>=0.10.1
+soundfile>=0.12.1
+numpy>=1.26.0
+
+# AI / Neural Network
+torch>=2.2.0
+torchaudio>=2.2.0
+
+# Face Swap — InsightFace + ONNX Runtime
+# Use CPU runtime by default (works everywhere). For GPU, replace with
+# `onnxruntime-gpu>=1.17.0` and ensure a matching CUDA driver is installed.
+insightface>=0.7.3
+onnxruntime>=1.17.0
+
+# Voice Cloning — Coqui XTTS v2
+# Use `coqui-tts` (the maintained fork) instead of the original `TTS`
+# package: the old PyPI name requires MSVC Build Tools on Windows to
+# compile a Cython extension, while coqui-tts ships binary wheels.
+coqui-tts>=0.27.0
+
+# Pin transformers to 4.x — coqui-tts imports `isin_mps_friendly` from
+# `transformers.pytorch_utils`, which was removed in transformers 5.0.
+transformers>=4.57,<5.0
+
+# Speech-to-Text for audio-to-audio voice conversion
+openai-whisper>=20231117
+
+# Text-to-Speech fallback (offline, no API key needed)
+pyttsx3>=2.90
+
+# Utilities
+scipy>=1.12.0
+matplotlib>=3.8.0
+python-dotenv>=1.0.0
+google-generativeai>=0.4.0

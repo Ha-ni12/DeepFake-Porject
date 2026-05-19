@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Deepfake Interaction System — CENG 384</title>
+    <meta name="description"
+        content="DSP-based deepfake interaction system featuring voice cloning, face swapping, AI conversation, and meeting simulation. CENG 384 project.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+</head>
+
+<body>
+
+    <!-- ═══════════════════════ HEADER ═══════════════════════════ -->
+    <header id="app-header">
+        <div class="header-inner">
+            <div class="logo-block">
+                <div class="logo-icon" aria-hidden="true">◈</div>
+                <div>
+                    <h1 class="header-title">AI Deepfake Interaction System</h1>
+                    <p class="header-sub">CENG 384 · Digital Signal Processing · Group Project</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-warn">⚠ Parody Mode</span>
+                <span class="badge badge-info">AI Generated</span>
+                <div id="api-status-dot" class="status-dot offline" title="Backend Status"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══════════════════════ TAB NAV ══════════════════════════ -->
+    <nav id="tab-nav" role="tablist" aria-label="System modules">
+        <button class="tab-btn active" id="tab-voice" role="tab" aria-selected="true" aria-controls="panel-voice"
+            data-tab="voice">
+            <span class="tab-icon">🎙</span> Voice Cloning
+        </button>
+        <button class="tab-btn" id="tab-face" role="tab" aria-selected="false" aria-controls="panel-face"
+            data-tab="face">
+            <span class="tab-icon">🎭</span> Face Swap
+        </button>
+        <button class="tab-btn" id="tab-chat" role="tab" aria-selected="false" aria-controls="panel-chat"
+            data-tab="chat">
+            <span class="tab-icon">💬</span> AI Conversation
+        </button>
+        <button class="tab-btn" id="tab-meeting" role="tab" aria-selected="false" aria-controls="panel-meeting"
+            data-tab="meeting">
+            <span class="tab-icon">📹</span> Meeting Simulation
+        </button>
+        <button class="tab-btn" id="tab-metrics" role="tab" aria-selected="false" aria-controls="panel-metrics"
+            data-tab="metrics">
+            <span class="tab-icon">📊</span> Evaluation
+        </button>
+    </nav>
+
+    <!-- ═══════════════════════ MAIN PANELS ══════════════════════ -->
+    <main id="app-main">
+
+        <!-- ── 1. VOICE CLONING ───────────────────────────────── -->
+        <section id="panel-voice" class="tab-panel active" role="tabpanel" aria-labelledby="tab-voice">
+            <div class="panel-grid two-col">
+
+                <!-- Controls -->
+                <div class="card">
+                    <h2 class="card-title">Voice Cloning Controls</h2>
+                    <p class="card-desc">Upload an audio file or type text. AI voice cloning converts it to a target
+                        speaker's voice using XTTS v2.</p>
+
+                    <div class="form-group">
+                        <label for="voice-profile-select">Celebrity Profile</label>
+                        <select id="voice-profile-select" class="form-control">
+                            <option value="profile_1">👩 Woman</option>
+                            <option value="profile_2">👨 Man</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target-voice-input">Custom Target Voice <span
+                                class="optional-badge">Optional</span></label>
+                        <p class="field-hint">Upload a 3–10 second WAV of the target speaker to clone their voice.
+                            Overrides the profile above.</p>
+                        <div class="file-drop-zone drop-zone-optional" id="target-voice-drop-zone">
+                            <span class="drop-icon">🎤</span>
+                            <span>Drop target voice sample here</span>
+                            <input type="file" id="target-voice-input" accept=".wav,.mp3" hidden>
+                        </div>
+                        <div id="target-voice-filename" class="filename-tag hidden"></div>
+                    </div>
+
+                    <div class="form-group-row" style="display: flex; gap: 1rem;">
+                        <div class="form-group" style="flex: 1;">
+                            <label for="pitch-slider">Pitch Shift: <span id="pitch-value">0 semitones</span></label>
+                            <input type="range" id="pitch-slider" class="form-range" min="-12" max="12" step="0.5"
+                                value="0">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="speed-slider">Speaking Rate: <span id="speed-value">1.0x</span></label>
+                            <input type="range" id="speed-slider" class="form-range" min="0.5" max="2.0" step="0.1"
+                                value="1.0">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="emotion-select">Emotional Tone</label>
+                        <select id="emotion-select" class="form-control">
+                            <option value="default">😐 Default (Neutral)</option>
+                            <option value="happy">😊 Happy / Excited</option>
+                            <option value="sad">😢 Sad / Sombre</option>
+                            <option value="angry">😠 Angry / Assertive</option>
+                            <option value="whispering">🤫 Whispering / Soft</option>
+                        </select>
+                    </div>
+
+                    <div class="form-divider"><span>— Upload Audio —</span></div>
+
+                    <div class="form-group">
+                        <label for="audio-input">Source Audio (WAV / MP3)</label>
+                        <div class="file-drop-zone" id="audio-drop-zone">
+                            <span class="drop-icon">🎵</span>
+                            <span>Drag & drop or click to browse</span>
+                            <input type="file" id="audio-input" accept=".wav,.mp3" hidden>
+                        </div>
+                        <div id="audio-filename" class="filename-tag hidden"></div>
+                    </div>
+
+                    <button id="process-voice-btn" class="btn btn-primary btn-full">
+                        <span class="btn-icon">▶</span> Process Audio
+                    </button>
+
+                    <div class="form-divider"><span>— or Text-to-Speech —</span></div>
+
+                    <div class="form-group">
+                        <label for="tts-input">Enter text to synthesise</label>
+                        <textarea id="tts-input" class="form-control" rows="3"
+                            placeholder="Type something to convert to speech…"></textarea>
+                    </div>
+
+                    <button id="process-tts-btn" class="btn btn-secondary btn-full">
+                        <span class="btn-icon">🔊</span> Synthesise Speech (TTS)
+                    </button>
+                </div>
+
+                <!-- Output -->
+                <div class="card">
+                    <h2 class="card-title">Audio Output</h2>
+                    <div id="voice-status" class="status-badge idle">● Ready</div>
+
+                    <div class="audio-output-area" id="audio-output-area">
+                        <div class="empty-state" id="audio-empty-state">
+                            <span style="font-size:3rem;">🎧</span>
+                            <p>Processed audio will appear here</p>
+                        </div>
+
+                        <div id="audio-result-block" class="hidden">
+                            <div class="audio-watermark-label">⚠ AI GENERATED — PARODY MODE</div>
+                            <audio id="audio-player" controls class="audio-player"></audio>
+
+                            <div class="mini-metrics">
+                                <div class="mini-metric">
+                                    <span class="mm-label">SNR</span>
+                                    <span class="mm-value" id="voice-snr">—</span>
+                                </div>
+                                <div class="mini-metric">
+                                    <span class="mm-label">MCD</span>
+                                    <span class="mm-value" id="voice-mcd">—</span>
+                                </div>
+                                <div class="mini-metric">
+                                    <span class="mm-label">Latency</span>
+                                    <span class="mm-value" id="voice-latency">—</span>
+                                </div>
+                            </div>
+                            
+                            <div id="voice-transcript-block" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--accent);">
+                                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; display: block;">Transcribed Source Audio</span>
+                                <p id="voice-transcript-text" style="margin: 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-primary);"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Spectrogram-like visualizer -->
+                    <canvas id="waveform-canvas" class="waveform-canvas" width="400" height="80"
+                        aria-label="Audio waveform visualisation"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── 2. FACE SWAP ───────────────────────────────────── -->
+        <section id="panel-face" class="tab-panel" role="tabpanel" aria-labelledby="tab-face">
+            <div class="panel-grid two-col">
+
+                <!-- Controls -->
+                <div class="card">
+                    <h2 class="card-title">Face Swap Controls</h2>
+                    <p class="card-desc">Upload a photo. InsightFace AI performs high-quality identity transfer onto
+                        your face.</p>
+
+                    <div class="form-group">
+                        <label for="face-profile-select">Target Celebrity Profile</label>
+                        <select id="face-profile-select" class="form-control">
+                            <option value="profile_1">profile 1</option>
+                            <option value="profile_2">profile 2</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target-face-input">Custom Target Face <span
+                                class="optional-badge">Optional</span></label>
+                        <p class="field-hint">Upload a clear face photo of anyone. Overrides the preset profile above.
+                        </p>
+                        <div class="file-drop-zone drop-zone-optional" id="target-face-drop-zone">
+                            <span class="drop-icon">🧑</span>
+                            <span>Drop target face image here</span>
+                            <input type="file" id="target-face-input" accept="image/*" hidden>
+                        </div>
+                        <div id="target-face-filename" class="filename-tag hidden"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="media-input">Source Image / Video Frame (JPG / PNG)</label>
+                        <div class="file-drop-zone" id="media-drop-zone">
+                            <span class="drop-icon">🖼</span>
+                            <span>Drag & drop or click to browse</span>
+                            <input type="file" id="media-input" accept="image/*" hidden>
+                        </div>
+                        <div id="media-filename" class="filename-tag hidden"></div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label for="trace-faces-checkbox"
+                            style="display:flex; align-items:center; gap:.4rem; cursor:pointer;">
+                            <input type="checkbox" id="trace-faces-checkbox" style="accent-color:var(--purple);">
+                            Show Face Tracing (Evaluation)
+                        </label>
+                    </div>
+
+                    <button id="process-face-btn" class="btn btn-primary btn-full">
+                        <span class="btn-icon">🎭</span> Generate Face Swap
+                    </button>
+
+                    <div id="face-status" class="status-badge idle" style="margin-top:1rem;">● Ready</div>
+                </div>
+
+                <!-- Preview -->
+                <div class="card">
+                    <h2 class="card-title">Live Preview</h2>
+                    <!-- Interactive Before/After Slider -->
+                    <div class="image-slider-wrapper" id="face-slider-wrapper">
+                        <!-- Initial Placeholder -->
+                        <div class="image-placeholder" id="face-placeholder" style="min-height: 300px; display: flex;">
+                            <span style="font-size:2.5rem; margin-bottom: 10px;">📷</span>
+                            <small>Upload an image to start</small>
+                        </div>
+
+                        <!-- Image Preview (before processing) -->
+                        <img id="original-preview-only" class="preview-img hidden" alt="Original input" style="max-height: 500px; object-fit: contain; margin: 0 auto; display: none; width: 100%; border-radius: 8px;">
+
+                        <!-- The Slider (after processing) -->
+                        <div class="slider-interactive hidden" id="slider-interactive">
+                            <!-- Base: Processed -->
+                            <img id="slider-processed" class="slider-base-img" alt="Processed">
+                            <div class="overlay-watermark" style="bottom: 12px; right: 12px; font-size: 0.7rem; z-index: 5;">AI GENERATED — PARODY MODE</div>
+                            
+                            <!-- Overlay: Original -->
+                            <div class="slider-overlay" id="slider-overlay">
+                                <img id="slider-original" class="slider-base-img" alt="Original">
+                            </div>
+
+                            <!-- Controls -->
+                            <input type="range" min="0" max="100" value="50" class="slider-range" id="face-slider-range">
+                            <div class="slider-handle-line" id="slider-handle-line"></div>
+                            <div class="slider-handle-button" id="slider-handle-button">
+                                <span style="font-size: 12px; margin-right: 2px;">◀</span><span style="font-size: 12px;">▶</span>
+                            </div>
+                            
+                            <div class="slider-label slider-label-left">Original</div>
+                            <div class="slider-label slider-label-right">Processed <span class="wm-chip" style="margin-left:4px;">AI</span></div>
+                        </div>
+                    </div>
+
+                    <div class="mini-metrics" style="margin-top:1rem;">
+                        <div class="mini-metric">
+                            <span class="mm-label">SSIM</span>
+                            <span class="mm-value" id="face-ssim">—</span>
+                        </div>
+                        <div class="mini-metric">
+                            <span class="mm-label">PSNR</span>
+                            <span class="mm-value" id="face-psnr">—</span>
+                        </div>
+                        <div class="mini-metric">
+                            <span class="mm-label">Latency</span>
+                            <span class="mm-value" id="face-latency">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── 3. AI CONVERSATION ─────────────────────────────── -->
+        <section id="panel-chat" class="tab-panel" role="tabpanel" aria-labelledby="tab-chat">
+            <div class="panel-grid two-col">
+
+                <div class="card" style="display:flex;flex-direction:column;height:560px;">
+                    <h2 class="card-title">AI Conversation</h2>
+                    <div class="form-group">
+                        <label for="chat-profile-select">Active Profile</label>
+                        <select id="chat-profile-select" class="form-control">
+                            <option value="profile_1">Public Figure 1</option>
+                            <option value="profile_2">Public Figure 2</option>
+                        </select>
+                    </div>
+
+                    <!-- Chat Log -->
+                    <div id="chat-log" class="chat-log" aria-live="polite" aria-label="Conversation log">
+                        <div class="chat-system-msg">Session started — select a profile and say hello!</div>
+                    </div>
+
+                    <!-- Input Row -->
+                    <div class="chat-input-row">
+                        <input type="text" id="chat-input" class="form-control" placeholder="Type your message…"
+                            autocomplete="off" aria-label="Chat message input">
+                        <button id="chat-send-btn" class="btn btn-primary" aria-label="Send message">Send</button>
+                    </div>
+                </div>
+
+                <!-- Info card -->
+                <div class="card">
+                    <h2 class="card-title">About This Module</h2>
+                    <p class="card-desc" style="line-height:1.7;">
+                        The <strong>AI Conversation module</strong> simulates two-way dialogue in the style of specific
+                        celebrity profiles,
+                        as specified in SRS §4. It uses keyword-based personality mapping — uses API
+                        (online - offline, privacy-preserving).
+                    </p>
+                    <div class="info-block">
+                        <div class="info-row"><span class="info-key">Profile A style</span><span
+                                class="info-val">Philosophical · Metaphorical · Witty</span></div>
+                        <div class="info-row"><span class="info-key">Profile B style</span><span class="info-val">Direct
+                                · Tech-focused · Confident</span></div>
+                        <div class="info-row"><span class="info-key">Session logging</span><span
+                                class="info-val">Conversation logged to CSV on each exchange</span></div>
+                        <div class="info-row"><span class="info-key">Ethical disclosure</span><span class="info-val">All
+                                replies are AI-generated simulations</span></div>
+                    </div>
+                    <div class="ethics-notice">
+                        <strong>&#9888; Ethical Disclosure</strong><br>
+                        All responses are AI-generated simulations for academic and parody purposes only.
+                        No representation of real persons is implied.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── 4. MEETING SIMULATION ──────────────────────────── -->
+        <section id="panel-meeting" class="tab-panel" role="tabpanel" aria-labelledby="tab-meeting">
+            <div class="card">
+                <h2 class="card-title">Meeting Simulation</h2>
+                <p class="card-desc">Place an AI character in a virtual meeting room for scripted scenarios or
+                    dynamic voice conversations.</p>
+
+                <div class="meeting-setup-row">
+                    <div class="form-group" style="flex:1;">
+                        <label for="scenario-select">Scenario</label>
+                        <select id="scenario-select" class="form-control">
+                            <option value="comedy_interview">Late Night Comedy Interview</option>
+                            <option value="job_interview">Job Interview Parody</option>
+                            <option value="friendly_debate">Friendly Debate &mdash; Pineapple on Pizza</option>
+                            <option value="motivational_speech">Motivational Commencement Speech</option>
+                            <option value="tech_talk">Technology Q&amp;A Panel</option>
+                            <option value="dynamic">Dynamic Free Chat (Voice)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1; margin-left:1rem;">
+                        <label for="meeting-profile-select">AI Profile</label>
+                        <select id="meeting-profile-select" class="form-control">
+                            <option value="profile_1">👩 Woman</option>
+                            <option value="profile_2">👨 Man</option>
+                            <option value="free_ai">🤖 Free AI (Unrestricted)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-left:1rem;">
+                        <label for="meeting-read-aloud"
+                            style="display:flex; align-items:center; gap:.4rem; cursor:pointer;">
+                            <input type="checkbox" id="meeting-read-aloud" checked style="accent-color:var(--purple);">
+                            Read Aloud
+                        </label>
+                    </div>
+                    <button id="start-meeting-btn" class="btn btn-primary"
+                        style="align-self:flex-end; margin-left:1rem;">
+                        &#9654; Start Session
+                    </button>
+                </div>
+
+                <div class="form-group hidden" id="meeting-target-voice-group" style="margin-bottom: 1.5rem;">
+                    <label for="meeting-target-voice-input">Custom AI Voice <span class="optional-badge">Optional</span></label>
+                    <p class="field-hint">Upload a 3–10 second WAV of any speaker. The AI will use this voice during the meeting.</p>
+                    <div class="file-drop-zone drop-zone-optional" id="meeting-target-voice-drop-zone">
+                        <span class="drop-icon">🎤</span>
+                        <span>Drop custom voice sample here</span>
+                        <input type="file" id="meeting-target-voice-input" accept=".wav,.mp3" hidden>
+                    </div>
+                    <div id="meeting-target-voice-filename" class="filename-tag hidden"></div>
+                </div>
+
+                <!-- Video grid -->
+                <div class="meeting-video-grid" id="meeting-video-grid">
+                    <!-- AI participant -->
+                    <div class="meeting-participant ai-participant">
+                        <div class="participant-video-area" style="background: #111;">
+                            <canvas id="ai-visualizer" style="width: 100%; height: 100%; border-radius: 8px;"></canvas>
+                        </div>
+                        <div class="participant-name">AI Participant <span class="wm-chip">DEEPFAKE</span></div>
+                        <div class="participant-watermark">AI GENERATED / PARODY MODE</div>
+                    </div>
+                    <!-- User participant -->
+                    <div class="meeting-participant user-participant">
+                        <div class="participant-video-area">
+                            <video id="local-video" autoplay muted playsinline></video>
+                            <div class="cam-placeholder" id="cam-placeholder">
+                                <span style="font-size:2rem;">&#128245;</span><br>Camera offline
+                            </div>
+                        </div>
+                        <div class="participant-name">You (Source)</div>
+                    </div>
+                </div>
+
+                <!-- Current script line -->
+                <div class="meeting-script-area">
+                    <div id="script-box" class="script-display" aria-live="polite">
+                        <em>Select a scenario and press Start Session&hellip;</em>
+                    </div>
+                    <div class="meeting-controls-row">
+                        <button id="webcam-btn" class="btn btn-secondary">&#128247; Toggle Camera</button>
+                        <button id="prev-line-btn" class="btn btn-secondary" disabled>&#9664; Prev</button>
+                        <button id="next-line-btn" class="btn btn-primary" disabled>Next &#9654;</button>
+                        <button id="record-btn" class="btn btn-primary hidden"
+                            style="background-color: var(--pink); border-color: var(--pink); color: #fff;">&#127908;
+                            Hold to
+                            Talk</button>
+                    </div>
+                    <div id="progress-bar-wrap" class="progress-bar-wrap">
+                        <div id="progress-bar" class="progress-bar" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <!-- Meeting transcript -->
+                <div class="meeting-transcript-area">
+                    <div class="transcript-header">
+                        <span class="transcript-title">&#128221; Meeting Transcript</span>
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <span id="transcript-count" class="transcript-count">0 lines</span>
+                            <button id="export-transcript-btn" class="btn btn-secondary"
+                                style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">⬇ Export</button>
+                        </div>
+                    </div>
+                    <div id="meeting-transcript" class="meeting-transcript">
+                        <div class="transcript-empty" id="transcript-empty">
+                            <em>Transcript will appear here as dialogue progresses&hellip;</em>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── 5. EVALUATION METRICS ──────────────────────────── -->
+        <section id="panel-metrics" class="tab-panel" role="tabpanel" aria-labelledby="tab-metrics">
+            <div class="panel-grid two-col">
+
+                <div class="card">
+                    <h2 class="card-title">Session Metrics</h2>
+                    <p class="card-desc">Quantitative evaluation as required by SRS §4 (Evaluation Module) — MCD, SNR,
+                        SSIM, PSNR, and latency.</p>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card" id="mc-latency">
+                            <div class="metric-icon">⏱</div>
+                            <span class="metric-label">Latency <span class="tooltip-trigger" data-tooltip="Latency measures the end-to-end execution time of the processing pipeline in milliseconds. Lower is better.">ⓘ</span></span>
+                            <span class="metric-value" id="metric-latency">— ms</span>
+                            <span class="metric-note">Target &lt; 2000 ms</span>
+                        </div>
+                        <div class="metric-card" id="mc-ssim">
+                            <div class="metric-icon">🖼</div>
+                            <span class="metric-label">SSIM <span class="tooltip-trigger" data-tooltip="Structural Similarity Index (SSIM) evaluates video/image quality degradation, comparing structural patterns between original and swapped frames (0 to 1). Closer to 1 is better.">ⓘ</span></span>
+                            <span class="metric-value" id="metric-ssim">—</span>
+                            <span class="metric-note">Structural Similarity</span>
+                        </div>
+                        <div class="metric-card" id="mc-psnr">
+                            <div class="metric-icon">📡</div>
+                            <span class="metric-label">PSNR <span class="tooltip-trigger" data-tooltip="Peak Signal-to-Noise Ratio (PSNR) measures reconstruction quality of swapped frames in decibels. Higher values indicate higher fidelity and lower distortion.">ⓘ</span></span>
+                            <span class="metric-value" id="metric-psnr">— dB</span>
+                            <span class="metric-note">Peak Signal-to-Noise</span>
+                        </div>
+                        <div class="metric-card" id="mc-snr">
+                            <div class="metric-icon">🔊</div>
+                            <span class="metric-label">SNR (Audio) <span class="tooltip-trigger" data-tooltip="Signal-to-Noise Ratio (SNR) measures audio signal quality in decibels relative to injected watermark noise. Higher values indicate cleaner speech.">ⓘ</span></span>
+                            <span class="metric-value" id="metric-snr">— dB</span>
+                            <span class="metric-note">Signal-to-Noise Ratio</span>
+                        </div>
+                        <div class="metric-card" id="mc-mcd">
+                            <div class="metric-icon">🎵</div>
+                            <span class="metric-label">MCD <span class="tooltip-trigger" data-tooltip="Mel-Cepstral Distortion (MCD) evaluates acoustic distance between original and synthesised voice envelopes using Mel-frequency cepstral coefficients. Lower is better.">ⓘ</span></span>
+                            <span class="metric-value" id="metric-mcd">—</span>
+                            <span class="metric-note">Mel Cepstral Distortion</span>
+                        </div>
+                    </div>
+
+                    <button id="export-btn" class="btn btn-accent btn-full" style="margin-top:1.5rem;">
+                        ⬇ Download Evaluation Report (CSV)
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Metrics Chart</h2>
+                    <canvas id="metrics-chart" width="420" height="300" aria-label="Metrics bar chart"></canvas>
+                    <p class="card-desc" style="margin-top:.75rem;font-size:.78rem;">
+                        Chart updates after each processing operation. Values are normalised to a 0–100 scale for
+                        comparison.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Face Tracking Geometry card (shown only when trace_faces is enabled) -->
+            <div id="tracing-eval-container" class="card hidden" style="margin-top:1.25rem;">
+                <h2 class="card-title">🧠 Face Tracking Geometry</h2>
+                <p class="card-desc">
+                    This visualization demonstrates how the InsightFace model detects and maps the 106 facial
+                    landmarks on both the original source and target images prior to swapping. The green bounding box
+                    marks the
+                    detected face region; the red dots mark individual landmark points.
+                </p>
+                <img id="tracing-result-img" alt="Source and target faces with landmarks and bounding box" style="width:100%; max-width:800px; display:block; margin:1rem auto 0;
+                        border-radius:10px; border:2px solid var(--border-color);" />
+            </div>
+
+            <!-- Session log table -->
+            <div class="card" style="margin-top:1.25rem;">
+                <h2 class="card-title">Session Log</h2>
+                <div class="table-wrapper">
+                    <table id="session-table" class="session-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Latency (ms)</th>
+                                <th>SSIM</th>
+                                <th>PSNR (dB)</th>
+                                <th>SNR (dB)</th>
+                                <th>MCD</th>
+                            </tr>
+                        </thead>
+                        <tbody id="session-log-body">
+                            <tr>
+                                <td colspan="7" class="empty-row">No operations yet — run a voice or face processing
+                                    task.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ═══════════════════════ FOOTER ═══════════════════════════ -->
+    <footer id="app-footer">
+        <p>
+            <strong>Mandatory Ethical Disclosure:</strong> This system is for educational and parody purposes only.
+            All outputs are AI-generated and watermarked. No impersonation or identity fraud is intended or facilitated.
+        </p>
+        <p class="footer-team">
+            CENG 384 · Group: Hani Al-Shalal · Yusuf Yılmaz · Alperen Enes Yaman · Yiğit Burak Çetin · Mustafa Özkürkcü
+        </p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
