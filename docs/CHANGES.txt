@@ -1,0 +1,432 @@
+================================================================================
+AI Deepfake Interaction System — Change Log
+Date: 2026-04-28
+================================================================================
+
+This file documents every change made during the bug-fix pass.
+Items #12, #15, #31, #32 from the original 32-issue audit were intentionally
+not changed (rationale at the bottom).
+
+--------------------------------------------------------------------------------
+ROUND 1 — Critical bugs (#1–#11, #13, #14, #16)
+--------------------------------------------------------------------------------
+
+[#1] backend/core/evaluation.py — calculate_psnr
+    Bug:   uint8 - uint8 wrapped modulo 256, giving wrong MSE/PSNR.
+    Fix:   Cast both arrays to float32 before subtraction. Added shape guard
+           that resizes the generated image to the original's size if needed.
+
+[#2] backend/main.py — process_voice
+    Bug:   Output WAV was always written at 24 kHz even when the cloner
+           returned 16 kHz audio (DSP fallback), causing chipmunk playback.
+    Fix:   Track actual output sample rate (out_sr): cloner.sr (24000) for
+           XTTS, 16000 for the DSP pitch-shift fallback. Use that rate for
+           sf.write(...) and for evaluation.
+
+[#3] backend/main.py — apply_audio_watermark calls
+    Bug:   Watermark was generated assuming 16 kHz regardless of the real
+           audio rate, so the 7.5 kHz tone landed at the wrong place.
+    Fix:   Now passes the correct sample rate (cloner.sr or out_sr) at every
+           call site: process_voice, process_tts, simulation_interact.
+
+[#4] backend/main.py — process_voice metric resample
+    Bug:   librosa.resample(y, orig_sr=16000, target_sr=16000) was a no-op,
+           and metrics compared a 16 kHz original to a 24 kHz output sample
+           by sample, producing meaningless SNR/MCD numbers.
+    Fix:   Resample original to out_sr before SNR/MCD when out_sr != 16000.
+           Pass sr=out_sr to calculate_mcd.
+
+[#5] backend/main.py — process_frame metrics
+    Bug:   SSIM/PSNR baseline was the resized original, so the watermark text
+           plus resizing dominated the score.
+    Fix:   Compare the pre-watermark swap against the watermarked output
+           (both same size). Now SSIM/PSNR measure watermark impact only.
+
+[#6] backend/dsp_models/voice_cloning.py — _transcribe
+    Bug:   whisper.load_model("base", ...) re-downloaded / re-loaded on
+           every call — slow and memory-hungry.
+    Fix:   Added self._whisper_model attribute, lazy-loaded on first call
+           and cached for the process lifetime.
+
+[#7] backend/dsp_models/voice_cloning.py — temp file handling
+    Bug:   NamedTemporaryFile(delete=False) was used as a context manager
+           and the path was reused for writing while the handle was still
+           open, causing intermittent PermissionError on Windows.
+    Fix:   Open, capture .name, immediately .close() the handle before
+           passing the path to TTS / Whisper / pyttsx3. Added try/except
+           OSError around os.remove. Applied to _xtts_tts, _transcribe,
+           _fallback_tts.
+
+[#8] backend/main.py — /conversation/chat
+    Bug:   conversation.respond(...) is potentially blocking (Gemini API);
+           calling it directly from an async route blocks the event loop.
+    Fix:   Wrapped with `await asyncio.to_thread(conversation.respond, ...)`.
+
+[#9] backend/core/conversation.py — Gemini model name
+    Bug:   "gemini-flash-latest" is no longer resolvable on the v1 API and
+           caused 404s; the system silently fell back to offline replies.
+    Fix:   Switched to "gemini-1.5-flash" (stable, current).
+
+[#10] venv311 — pyttsx3 missing
+    Bug:   pyttsx3 was in requirements.txt but not installed in the active
+           venv (see crash.log).
+    Fix:   Installed via:
+              .\venv311\Scripts\python.exe -m pip install pyttsx3
+
+[#11] backend/main.py — silent DSP fallback
+    Bug:   When XTTS was loaded but no profile_X_voice.wav existed, the path
+           silently fell back to pitch shift with no log.
+    Fix:   Added explicit print() messages distinguishing the two cases
+           (XTTS unavailable vs. no reference voice file).
+
+[#13] backend/core/evaluation.py — calculate_ssim
+    Bug:   Crashed if input shapes differed; default win_size=7 fails on
+           very small crops.
+    Fix:   Added shape resize guard. Compute a clamped odd win_size based
+           on the smaller dimension; return 1.0 for windows < 3.
+
+[#14] backend/main.py + backend/core/preprocessing.py
+    Bug:   Preprocessor was imported and instantiated but never used; the
+           instantiation crashed once the import was removed (during fix).
+           Comment incorrectly said "Initialize Dlib face detector" while
+           the code uses an OpenCV Haar cascade.
+    Fix:   Removed the unused `from backend.core.preprocessing import
+           Preprocessor` and the `preprocessor = Preprocessor()` line.
+           Corrected the comment in preprocessing.py.
+
+[#16] backend/dsp_models/face_swap.py — get_model providers kwarg
+    Bug:   Older insightface releases reject providers= on
+           model_zoo.get_model and raise TypeError.
+    Fix:   Try with providers=, fall back to no-kwarg call on TypeError.
+
+--------------------------------------------------------------------------------
+ROUND 2 — Functional, frontend, and hardening fixes (#17–#30)
+--------------------------------------------------------------------------------
+
+[#17] backend/core/conversation.py — _generate_gemini_response
+    Bug:   System prompt was stuffed into the first user message; once the
+           conversation got long the first turn could be evicted and the
+           model lost its persona.
+    Fix:   Pass system_instruction= to GenerativeModel(...). Build a clean
+           alternating user/model history. Includes TypeError fallback for
+           older SDKs that don't support system_instruction.
+
+[#18] backend/core/conversation.py — list_models in debug branch
+    Bug:   `m.supported_generation_methods` AttributeErrors on newer SDK
+           versions where the field was renamed.
+    Fix:   Use getattr with a fallback to `supported_actions`, default [].
+
+[#19] frontend/app.js — API_BASE precedence
+    Bug:   `a || b && c` parsed as `a || (b && c)`; while it happened to
+           work for the common cases, the intent was unclear and fragile.
+    Fix:   Added explicit parentheses around `(b && c)`.
+
+[#20] frontend/app.js — checkApiHealth
+    Bug:   `AbortSignal.timeout(3000)` is unsupported in older Safari/Edge,
+           causing checkApiHealth to throw and the dot to read "Offline".
+    Fix:   Replaced with `AbortController + setTimeout` (universal).
+
+[#21] frontend/app.js — Hold-to-Talk
+    Bug:   Only mouse events were wired, so the dynamic chat record button
+           was unusable on touch devices.
+    Fix:   Added touchstart (preventDefault + dispatch mousedown), touchend
+           (preventDefault + stopRecording), and touchcancel.
+
+[#22] frontend/app.js — setBtnLoading
+    Bug:   Calling with isLoading=true twice in a row stored the spinner
+           HTML as origText, permanently destroying the original label.
+    Fix:   Capture origText only when not already set; delete the dataset
+           key on restoration.
+
+[#23] frontend/app.js — loadProfileAvatar
+    Bug:   Old onload/onerror handlers from a previous profile switch could
+           fire after the new src had been assigned, flipping visibility
+           back to the wrong state.
+    Fix:   Null-out previous handlers and reset to the fallback before
+           assigning the new src.
+
+[#24] frontend/index.html — profile labels
+    Bug:   Same `profile_1`/`profile_2` keys had different display names in
+           each tab (Woman/Man, Ginger guy/Excited guy, Public Figure A/B),
+           confusing the user.
+    Fix:   All three dropdowns now read "Public Figure A" / "Public Figure B".
+
+[#25] frontend/app.js — appendTableRow
+    Bug:   `tbody.querySelector('.empty-row').closest('tr')` was fragile if
+           markup changed.
+    Fix:   Query `td.empty-row` directly and remove its parentElement.
+
+[#26] requirements.txt — onnxruntime
+    Bug:   Pinned onnxruntime-gpu only; CPU-only machines or machines with
+           insufficient CUDA drivers get noisy fallbacks (the user's
+           machine showed CUDA 35 errors).
+    Fix:   Switched default to plain `onnxruntime`. Added a comment
+           describing how to switch to GPU.
+
+[#27] backend/main.py — /conversation/chat latency
+    Bug:   evaluator.log_to_csv("Conversation", latency=0) always recorded 0.
+    Fix:   Measure real wall-clock latency around the asyncio.to_thread call
+           and log that value.
+
+[#28] backend/dsp_models/face_swap.py — _post_process(original)
+    Bug:   `original` parameter was unused since the dead helpers were not
+           wired up.
+    Fix:   Documented in the docstring that `original` is intentionally
+           kept for the optional luminance/seamless-clone passes that can
+           be re-enabled later. (Signature unchanged so callers don't
+           break.)
+
+[#29] backend/main.py — CORS
+    Bug:   `allow_origins=["*"]` is fine for an academic demo but is a CSRF
+           hazard if the service is ever exposed.
+    Fix:   Restricted to localhost origins:
+              http://127.0.0.1:8000, http://localhost:8000,
+              http://127.0.0.1:5500, http://localhost:5500
+           Add deployment origins explicitly when needed.
+
+[#30] backend/core/evaluation.py — log_to_csv concurrency
+    Bug:   Two concurrent requests writing to session_metrics.csv could
+           interleave rows.
+    Fix:   Added `threading.Lock` (`self._lock`) and acquired it for the
+           open/append block.
+
+--------------------------------------------------------------------------------
+NEW: BACKWARD-COMPATIBLE JSON BODY FOR /conversation/chat (additional to #12)
+--------------------------------------------------------------------------------
+
+backend/main.py + frontend/app.js
+    The /conversation/chat endpoint now accepts EITHER a JSON body
+    `{"message": "...", "profile": "..."}` OR the legacy query-string form,
+    so existing clients keep working. Frontend updated to send JSON.
+
+--------------------------------------------------------------------------------
+start_server.bat — robustness
+--------------------------------------------------------------------------------
+
+  - cd /d "%~dp0" so the script always runs from the project root.
+  - Uses the venv Python explicitly (%~dp0venv311\Scripts\python.exe), not
+    the system python — avoids the "missing module → window vanishes"
+    failure mode.
+  - If venv311 is missing, prints a clear error and pauses.
+  - Notes the ~1.9 GB first-run XTTS download.
+  - `pause` at the end so you can read errors when the server exits.
+
+--------------------------------------------------------------------------------
+NOT CHANGED — and why
+--------------------------------------------------------------------------------
+
+[#15] Dead code in backend/dsp_models/face_swap.py
+    The module ships ~340 lines of unused helpers (per-zone color correction,
+    Laplacian pyramid blending, multi-pass seamless clone, etc.). They are
+    NOT referenced at runtime, so they cause no bug. Deleting them is risky
+    (someone may want to re-enable them) and provides no runtime benefit.
+    The active path (denoise + sharpen) is documented in _post_process.
+
+[#31] Stray top-level files
+    `4.57`, `the domain.txt`, `crash.log`, `session_metrics.csv` — these are
+    user artifacts, not bugs. Left in place; you can delete them manually if
+    you want a clean tree.
+
+[#32] __init__.py files
+    Verified — all three are fine. backend/__init__.py contains a useful
+    transformers compatibility patch.
+
+================================================================================
+FILES TOUCHED
+================================================================================
+
+Backend (Python):
+  backend/main.py
+  backend/core/conversation.py
+  backend/core/evaluation.py
+  backend/core/preprocessing.py
+  backend/dsp_models/face_swap.py
+  backend/dsp_models/voice_cloning.py
+
+Frontend:
+  frontend/index.html
+  frontend/app.js
+
+Other:
+  requirements.txt
+  start_server.bat
+  (CHANGES.txt — this file)
+
+Environment:
+  pyttsx3 installed in venv311
+
+================================================================================
+ROUND 2 — Face swap quality overhaul (2026-04-28, post-audit)
+================================================================================
+
+[#33] backend/dsp_models/face_swap.py — _post_process
+    Bug:   bilateralFilter + unsharpMask(amount=0.3) was being applied to the
+           inswapper_128 output. Unsharp mask amplified the upsampling noise
+           from the 128x128 swap bottleneck, producing a visible grainy /
+           pixelated texture across the swapped face.
+    Fix:   Removed both passes. Replaced with optional GFPGAN HD restoration
+           (see #34) gated on a soft face mask so background pixels are
+           untouched. When GFPGAN is unavailable, raw inswapper output is
+           returned (cleaner than the old artefact-amplifying pipeline).
+
+[#34] backend/dsp_models/face_restorer.py — NEW FILE
+    Adds GFPGANRestorer: a thin ONNX Runtime wrapper around GFPGANv1.4.onnx
+    (~333 MB). Crops the face bbox with 35% padding, runs the model at
+    512x512, pastes the restored crop back into the frame. Recovers fine
+    detail (skin texture, eye sharpness) destroyed by inswapper's 128x128
+    bottleneck. Becomes a no-op if the model file is missing or fails to
+    load — the swap pipeline still works.
+
+    Auto-download: on first server start, if GFPGANv1.4.onnx is not present
+    in backend/dsp_models/, the restorer automatically downloads it from
+    the xuanandsix/GFPGAN-onnxruntime-demo GitHub release with a progress
+    bar. Set DISABLE_GFPGAN_AUTODOWNLOAD=1 in the environment to opt out.
+    Failed downloads are cleaned up so the next run can retry.
+
+[#35] backend/dsp_models/face_swap.py — FaceSwapper.__init__
+    Instantiates the optional GFPGAN restorer and integrates it into the
+    swap pipeline. Logs `[GFPGAN] Loaded ...` on successful initialisation.
+
+[#36] backend/dsp_models/face_swap.py — _get_providers
+    Added DirectML (DmlExecutionProvider) to the provider priority chain:
+        CUDA  -> DirectML -> CPU
+    DirectML enables GPU acceleration on AMD and Intel GPUs on Windows
+    (CUDA is NVIDIA-only). To enable, install:
+        pip install onnxruntime-directml
+    The same priority is applied inside face_restorer.py for GFPGAN.
+
+[#37] backend/main.py — process_frame metrics
+    Bug:   SSIM and PSNR were computed between `swapped_frame` and
+           `final_frame` (= swap + watermark overlay). This only measured
+           the watermark, producing a deceptively high SSIM (~0.98) even
+           when the swap quality was poor.
+    Fix:   Now compares the original input frame against the swapped frame,
+           which is what the metric is meant to express. Watermark-only
+           regions no longer dominate the score.
+
+[#38] download_models.py — NEW FILE
+    Optional standalone helper to pre-fetch GFPGANv1.4.onnx without
+    starting the server. Useful for offline / air-gapped setups.
+    Usage:
+        .\venv311\Scripts\python.exe download_models.py
+    Not required for normal use — the server auto-downloads on first run.
+
+[#39] backend/dsp_models/face_restorer.py — Mirror fallback
+    Bug:   xuanandsix's GitHub release URL (used in the initial download
+           helper) returned HTTP 404 — the asset was removed from the
+           release. Auto-download failed on first server start.
+    Fix:   Replaced the single URL with an ordered list of mirrors. First
+           successful download wins; a failed mirror cleans up its partial
+           file and the next one is tried. Same change applied to the
+           standalone download_models.py helper. New primary mirror:
+           https://huggingface.co/Meeperomi/GFPGANv1.4-onnx (verified 324 MB).
+
+[#40] backend/dsp_models/face_restorer.py — resolve_providers
+    Bug:   Every InsightFace model load (det_10g, 2d106det, 1k3d68,
+           genderage, w600k_r50, inswapper, GFPGAN) printed an "EP Error"
+           CUDA failure stack trace before falling back to CPU. ~7 noisy
+           tracebacks per server start on machines without NVIDIA GPUs.
+    Fix:   Added a cached `resolve_providers()` helper that probes each
+           available execution provider exactly ONCE at startup using a
+           1-op identity ONNX graph. The probe:
+             - sets `session.disable_cpu_ep_fallback=1` so a real CUDA
+               failure raises instead of silently falling back
+             - verifies `session.get_providers()` actually contains the
+               requested EP after creation
+             - redirects native fd 1/2 AND swaps `sys.stdout`/`sys.stderr`
+               to suppress onnxruntime's printf-based EP error message
+           Result: a single line is printed, e.g.
+             [ORT] Using CUDA execution provider (NVIDIA GPU).
+             [ORT] Using DirectML execution provider (AMD/Intel/NVIDIA GPU).
+             [ORT] CUDA listed but unusable (driver/DLL missing). Using CPU.
+           Both `FaceSwapper._get_providers()` and `GFPGANRestorer.__init__`
+           now delegate to the same cached resolver.
+
+[#41] backend/dsp_models/face_swap.py — Identity-similarity short-circuit
+    Bug:   Even when the source and target faces were the same person
+           (e.g. Trump→Trump), inswapper_128 still ran the full swap and
+           reconstructed the face through its 128x128 bottleneck. This
+           subtly distorted features (the user reported "bigger nose")
+           because the model interprets and re-renders identity rather
+           than passing pixels through.
+    Fix:   Before swapping, compute the cosine similarity between the
+           source and target ArcFace embeddings (`normed_embedding`).
+           If similarity ≥ 0.55 (same person, very high confidence), the
+           swap is skipped entirely — only the GFPGAN restoration pass
+           runs. The original facial geometry is preserved exactly.
+
+[#42] backend/dsp_models/face_swap.py — Multi-pass swap
+    Bug:   inswapper_128 has limited identity-transfer strength on a
+           single forward pass. The user noted Trump→Biden swaps "did
+           not look like Joe Biden at all".
+    Fix:   When source ≠ target, the swap now runs in two passes: the
+           output of the first pass is re-detected and fed back as the
+           source for a second pass, pulling the identity vector closer
+           to the target. Two passes is the standard sweet spot — three
+           or more begin to hallucinate features. Falls back to single-
+           pass if face re-detection fails between passes.
+
+[#43] backend/dsp_models/face_swap.py — REVERTED multi-pass to single-pass
+    Reason: end-to-end testing with real Trump/Biden HD portraits showed
+    that a 2nd inswapper pass AMPLIFIED any asymmetry in the source pose.
+    Trump's source has a slight natural squint that, after pass 2,
+    became a fully closed eye on one side — a clearly broken output.
+    Single-pass preserves identity transfer without distortion and
+    matches the default behaviour of FaceFusion / Roop / SimSwap. The
+    identity-similarity short-circuit (#41) is retained.
+
+[#44] backend/dsp_models/face_swap.py — Forehead seam fix
+    Bug:   GFPGAN restoration was being blended back through the face
+           landmark convex hull, but the 106 InsightFace landmarks only
+           cover eyebrows down to chin — the forehead was outside the
+           mask. Result: a visible horizontal seam across the forehead
+           where high-quality GFPGAN pixels met grainy inswapper-128
+           upsample output.
+    Fix:   Replaced the landmark mask with a feathered RECTANGULAR mask
+           matching the GFPGAN crop itself (bbox + 35% pad). The 12%
+           feather + Gaussian blur produces a smooth fade into the
+           surrounding swap pixels. Forehead, ears, and jawline are now
+           uniformly restored without a visible boundary.
+
+[#45] requirements.txt — Replace `TTS` with `coqui-tts` + pin transformers
+    Bug:   The original `TTS>=0.22.0` line on PyPI requires Microsoft
+           Visual C++ Build Tools to compile a Cython extension on
+           Windows. Fresh installs failed with:
+             "error: Microsoft Visual C++ 14.0 or greater is required."
+           Additionally, `transformers` had drifted to 5.5.4, which
+           removed `isin_mps_friendly` from `transformers.pytorch_utils`
+           — TTS imports that symbol, so all TTS imports raised
+           ImportError at runtime.
+    Fix:   - Replaced `TTS>=0.22.0` with `coqui-tts>=0.27.0` (the
+             maintained fork — ships pre-built binary wheels, no MSVC
+             needed). Same Python API, drop-in replacement.
+           - Pinned `transformers>=4.57,<5.0` so coqui-tts imports
+             succeed.
+           Verified end-to-end: all 19 packages import cleanly, the full
+           backend (XTTS v2 + buffalo_l + inswapper + GFPGAN + Gemini)
+           boots without errors.
+
+================================================================================
+HOW TO RUN
+================================================================================
+
+Option A — script:
+  Double-click start_server.bat (or run it from a cmd window).
+
+Option B — manual:
+  .\venv311\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+
+Then open http://127.0.0.1:8000/ — you'll be redirected to the frontend at /app/.
+
+First run downloads:
+  - XTTS v2 voice cloning model (~1.87 GB)
+  - InsightFace buffalo_l pack    (~280 MB)
+  - GFPGANv1.4.onnx face restorer (~333 MB)
+Subsequent runs start in seconds.
+
+Optional GPU acceleration on AMD / Intel GPUs (Windows):
+  .\venv311\Scripts\python.exe -m pip install onnxruntime-directml
+On NVIDIA GPUs, install CUDA 12 + cuDNN 9 + onnxruntime-gpu instead.
+Without either, the system runs on CPU (slower but identical quality).
+
+================================================================================
